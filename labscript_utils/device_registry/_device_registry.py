@@ -6,6 +6,10 @@ import traceback
 import inspect
 from labscript_utils import dedent
 from labscript_utils.labconfig import LabConfig
+import imp #this is the older version of importlib
+
+import sys
+#sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 """This file contains the machinery for registering and looking up what BLACS tab and
@@ -64,7 +68,9 @@ def _get_import_paths(import_names):
     If the packages do not exist, ignore them."""
     paths = []
     for name in import_names:
+        print("pre spec")
         spec = importlib.util.find_spec(name)
+        print("post spec")
         if spec is not None and spec.submodule_search_locations is not None:
             paths.extend(spec.submodule_search_locations)
     return paths
@@ -94,6 +100,7 @@ class ClassRegister(object):
         # The name given to the instance in this namespace, so we can use it in error messages:
         self.instancename = instancename
 
+
     def __call__(self, cls):
         """Adds the class to the register so that it can be looked up later
         by module name"""
@@ -119,8 +126,15 @@ class ClassRegister(object):
     def __getitem__(self, name):
         try:
             # Ensure the module's code has run (this does not re-import it if it is already in sys.modules)
+            print("ashrit 100")
+            print(f"Attempting to import: .{name} from labscript_devices")
+            print(sys.path)
             importlib.import_module('.' + name, 'labscript_devices')
-        except ImportError:
+            #imp.load_module('labscript_devices.' + name, *imp.find_module(name, [labscript_devices_path]))
+            print("ashrit 200")
+        except ImportError as e:
+            print("herio")
+            print(f"Import failed. Error: {e}")
             msg = """No %s registered for a device named %s. Ensure that there is a file
                 'register_classes.py' with a call to
                 labscript_devices.register_classes() for this device, with the device
@@ -207,6 +221,7 @@ _register_classes_script_files = {}
 
 # Wrapper functions to get devices out of the class registries.
 def get_BLACS_tab(name):
+    print('getting BLACS tab and printing path: ', sys.path)
     if not BLACS_tab_registry:
         populate_registry()
     if name in BLACS_tab_registry:
@@ -246,22 +261,31 @@ def register_classes(labscript_device_name, BLACS_tab=None, runviewer_parser=Non
     script_filename = os.path.abspath(inspect.stack()[1][0].f_code.co_filename)
     _register_classes_script_files[labscript_device_name] = script_filename
 
-
+# calls this fxn
 def populate_registry():
     """Walk the labscript_devices folder looking for files called register_classes.py,
     and run them. These files are expected to make calls to
     register_classes() to inform us of what BLACS tabs and runviewer classes correspond
     to their labscript device classes."""
     # We execute the register_classes modules as a direct submodule of labscript_devices.
+    print("LABSCRIPT_DEVICES_DIRS:", LABSCRIPT_DEVICES_DIRS)
     for devices_dir in LABSCRIPT_DEVICES_DIRS:
+        print("ashrit 1")
         for folder, _, filenames in os.walk(devices_dir):
+            print("ashrit 2")
             if 'register_classes.py' in filenames:
                 # The module name is the path to the file, relative to the labscript suite
                 # install directory:
                 # Open the file using the import machinery, and run it
+                print("ashrit 3")
                 spec = importlib.machinery.PathFinder.find_spec('register_classes', [folder])
+                print("this is spec: ", spec)
+                print("ashrit 4")
                 mod = importlib.util.module_from_spec(spec)
+                print("this is mod: ", mod)
+                print("ashrit 5")
                 spec.loader.exec_module(mod)
+                print("ashrit 6")
                 # fully importing module would require adding to sys.modules
                 # and each import would need to have unique names
                 # but we just need to run the registering code, not actually import the module
